@@ -1,179 +1,114 @@
-# Press the green button in the gutter to run the script.
-import math
-from math import floor,sin
+from math import floor, sin, pow
 import struct
 import numpy as np
 from enum import Enum
 from bitarray import bitarray
+#
+# A = 0x67452301
+# B = 0xEFCDAB89
+# C = 0x98BADCFE
+# D = 0x10325476
 
-from argparse import ArgumentParser
+f1 = lambda b, c, d: ((b & c) | ((~b) & d)) & 0xFFFFFFFF
+f2 = lambda b, c, d: ((b & d) | (c & (~d))) & 0xFFFFFFFF
+f3 = lambda b, c, d: (b ^ c ^ d) & 0xFFFFFFFF
+f4 = lambda b, c, d: (c ^ (b | (~d))) & 0xFFFFFFFF
 
-class MD5Buffer(Enum):
-    A = 0x67452301
-    B = 0xEFCDAB89
-    C = 0x98BADCFE
-    D = 0x10325476
 
-k = [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
-     5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
-     4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
-     6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21]
-# print(k)
+def leftrotate(x, c):
+    """ Left rotate the number x by c bytes."""
+    x &= 0xFFFFFFFF
+    return ((x << c) | (x >> (32 - c))) & 0xFFFFFFFF
 
-class MD5(object):
-    _string = "Hello"
-    _buffers = {
-        MD5Buffer.A: None,
-        MD5Buffer.B: None,
-        MD5Buffer.C: None,
-        MD5Buffer.D: None,
-    }
-    @classmethod
-    def hash(cls,string):
-        cls._string = string
-        preprocessed_bit_array = cls._step_2(cls._step_1())
-        cls._step_3()
-        cls._step_4(preprocessed_bit_array)
-        return cls._step_5()
 
-    @classmethod
-    def _step_1(cls):
-        # Convert the string to a bit array.
-        bit_array = bitarray(endian="big")
-        bit_array.frombytes(cls._string.encode("utf-8"))
+def leftshift(x, c):
+    """ Left shift the number x by c bytes."""
+    return x << c
 
-        # Pad the string with a 1 bit and as many 0 bits required such that
-        # the length of the bit array becomes congruent to 448 modulo 512.
-        # Note that padding is always performed, even if the string's bit
-        # length is already conguent to 448 modulo 512, which leads to a
-        # new 512-bit message block.
-        bit_array.append(1)
-        while len(bit_array) % 512 != 448:
-            bit_array.append(0)
 
-        # For the remainder of the MD5 algorithm, all values are in
-        # little endian, so transform the bit array to little endian.
-        # print(bit_array)
-        return bitarray(bit_array, endian="little")
 
-    @classmethod
-    def _step_2(cls, step_1_result):
-        # Extend the result from step 1 with a 64-bit little endian
-        # representation of the original message length (modulo 2^64).
-        length = (len(cls._string) * 8) % pow(2, 64)
-        length_bit_array = bitarray(endian="little")
-        length_bit_array.frombytes(struct.pack("<Q", length))
+class HashMD5(object):
+    def __init__(self):
+        self.byteorder = 'little'
+        self.block_size = 64
+        self.digest_size = 16
+        # Internal data
+        s = [0] * 64
+        K = [0] * 64
+        # Initialize s, s specifies the per-round shift amounts
+        s[0:16] = [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22]
+        s[16:32] = [5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20]
+        s[32:48] = [4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23]
+        s[48:64] = [6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21]
+        for i in range(64):
+            K[i] = floor(2 ** 32 * abs(sin(i + 1))) & 0xFFFFFFFF
+        # Store it
+        self._s = s
+        self._K = K
+        # Initialize variables:
+        a0 = 0x67452301  # A
+        b0 = 0xefcdab89  # B
+        c0 = 0x98badcfe  # C
+        d0 = 0x10325476  # D
+        self.hash_pieces = [a0, b0, c0, d0]
 
-        result = step_1_result.copy()
-        result.extend(length_bit_array)
-        return result
+    def hash(self, arg,type='text'):
+        def readF(arg):
+            return open(arg,'rb').read()
+        if type == 'file':
+            arg = readF(arg)
+        else:
+            arg = arg.encode('utf-8')
+        s, K = self._s, self._K
+        a0, b0, c0, d0 = self.hash_pieces
 
-    @classmethod
-    def _step_3(cls):
-        # Initialize the buffers to their default values.
-        for buffer_type in cls._buffers.keys():
-            cls._buffers[buffer_type] = buffer_type.value
+        data = bytearray(arg)
+        origin_len_of_bits = (8 * len(data)) & 0xFFFFFFFFFFFFFFFF
+        pres = 0x80
 
-    @classmethod
-    def _step_4(cls, step_2_result):
-        # Define the four auxiliary functions that produce one 32-bit word.
-        F = lambda x, y, z: (x & y) | (~x & z)
-        G = lambda x, y, z: (x & z) | (y & ~z)
-        H = lambda x, y, z: x ^ y ^ z
-        I = lambda x, y, z: y ^ (x | ~z)
+        print(int.from_bytes(b'0x80','big'))
+        data.append(0x80)
+        while len(data) % 64 != 56:
+            data.append(0)
+        data += origin_len_of_bits.to_bytes(8, byteorder='little')
+        print(range(0, len(data), 64))
+        for offset in range(0, len(data), 64):
+            chunks = data[offset: offset + 64]
 
-        # Define the left rotation function, which rotates `x` left `n` bits.
-        rotate_left = lambda x, n: (x << n) | (x >> (32 - n))
-
-        # Define a function for modular addition.
-        modular_add = lambda a, b: (a + b) % pow(2, 32)
-
-        # Compute the T table from the sine function. Note that the
-        # RFC starts at index 1, but we start at index 0.
-        T = [floor(pow(2, 32) * abs(sin(i + 1))) for i in range(64)]
-
-        # The total number of 32-bit words to process, N, is always a
-        # multiple of 16.
-        N = len(step_2_result) // 32
-
-        # Process chunks of 512 bits.
-        for chunk_index in range(N // 16):
-            # Break the chunk into 16 words of 32 bits in list X.
-            start = chunk_index * 512
-            X = [step_2_result[start + (x * 32): start + (x * 32) + 32] for x in range(16)]
-
-            # Convert the `bitarray` objects to integers.
-            X = [int.from_bytes(word.tobytes(), byteorder="little") for word in X]
-
-            # Make shorthands for the buffers A, B, C and D.
-            A = cls._buffers[MD5Buffer.A]
-            B = cls._buffers[MD5Buffer.B]
-            C = cls._buffers[MD5Buffer.C]
-            D = cls._buffers[MD5Buffer.D]
-
-            # Execute the four rounds with 16 operations each.
-            for i in range(4 * 16):
+            A, B, C, D = a0, b0, c0, d0
+            for i in range(64):
                 if 0 <= i <= 15:
-                    k = i
-                    s = [7, 12, 17, 22]
-                    temp = F(B, C, D)
+                    F = f1(B, C, D)
+                    g = i
                 elif 16 <= i <= 31:
-                    k = ((5 * i) + 1) % 16
-                    s = [5, 9, 14, 20]
-                    temp = G(B, C, D)
+                    F = f2(B, C, D)
+                    g = (5 * i + 1) % 16
                 elif 32 <= i <= 47:
-                    k = ((3 * i) + 5) % 16
-                    s = [4, 11, 16, 23]
-                    temp = H(B, C, D)
+                    F = f3(B, C, D)
+                    g = (3 * i + 5) % 16
                 elif 48 <= i <= 63:
-                    k = (7 * i) % 16
-                    s = [6, 10, 15, 21]
-                    temp = I(B, C, D)
+                    F = f4(B, C, D)
+                    g = (7 * i) % 16
+                to_rotate = (A + F + K[i] + int.from_bytes(chunks[4 * g: 4 * g + 4], byteorder='little')) & 0xFFFFFFFF
+                new_B = (B + leftrotate(to_rotate, s[i])) & 0xFFFFFFFF
+                A, B, C, D = D, new_B, B, C
+            a0 = (a0 + A) & 0xFFFFFFFF
+            b0 = (b0 + B) & 0xFFFFFFFF
+            c0 = (c0 + C) & 0xFFFFFFFF
+            d0 = (d0 + D) & 0xFFFFFFFF
+        self.hash_pieces = [a0, b0, c0, d0]
 
-                # The MD5 algorithm uses modular addition. Note that we need a
-                # temporary variable here. If we would put the result in `A`, then
-                # the expression `A = D` below would overwrite it. We also cannot
-                # move `A = D` lower because the original `D` would already have
-                # been overwritten by the `D = C` expression.
-                temp = modular_add(temp, X[k])
-                temp = modular_add(temp, T[i])
-                temp = modular_add(temp, A)
-                temp = rotate_left(temp, s[i % 4])
-                temp = modular_add(temp, B)
+    def hexdigest(self):
+        def digest(list_hash):
+            return sum(leftshift(x, (32 * ig)) for ig, x in enumerate(list_hash))
 
-                # Swap the registers for the next operation.
-                A = D
-                D = C
-                C = B
-                B = temp
+        digest = digest(self.hash_pieces)
+        raw = digest.to_bytes(16, byteorder="little")
+        fortmatStr = '{:0' + str(2 * 16) + 'x}'
+        print(fortmatStr)
+        return fortmatStr.format(int.from_bytes(raw, byteorder="big"))
 
-            # Update the buffers with the results from this chunk.
-            cls._buffers[MD5Buffer.A] = modular_add(cls._buffers[MD5Buffer.A], A)
-            cls._buffers[MD5Buffer.B] = modular_add(cls._buffers[MD5Buffer.B], B)
-            cls._buffers[MD5Buffer.C] = modular_add(cls._buffers[MD5Buffer.C], C)
-            cls._buffers[MD5Buffer.D] = modular_add(cls._buffers[MD5Buffer.D], D)
-
-    @classmethod
-    def _step_5(cls):
-        # Convert the buffers to little-endian.
-        A = struct.unpack("<I", struct.pack(">I", cls._buffers[MD5Buffer.A]))[0]
-        B = struct.unpack("<I", struct.pack(">I", cls._buffers[MD5Buffer.B]))[0]
-        C = struct.unpack("<I", struct.pack(">I", cls._buffers[MD5Buffer.C]))[0]
-        D = struct.unpack("<I", struct.pack(">I", cls._buffers[MD5Buffer.D]))[0]
-
-        # Output the buffers in lower-case hexadecimal format.
-        return f"{format(A, '08x')}{format(B, '08x')}{format(C, '08x')}{format(D, '08x')}"
 # if __name__ == '__main__':
-#     # r = [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
-#     #      5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
-#     #      4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
-#     #      6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21]
-#     # for i in range(64):
-#     #     k[i] = math.floor(math.fabs(math.sin(i + 1)) * (math.pow(2, 32)))
-#     # print(k)
-# 
-# 
-#     with open("./hello.txt","r") as f:
-#         print(MD5.hash(f.read()))
-
-
+#     h1 = HashMD5()
+#     h1.hash('a')
+#     print(h1.hexdigest())
