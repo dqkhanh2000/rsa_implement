@@ -1,8 +1,9 @@
+from posixpath import expanduser
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from rsa import generate_keypair, decrypt, encrypt
-from lib import md5_hash
+from md5 import MD5
 
 class chukyso(QWidget):
 
@@ -37,8 +38,9 @@ class chukyso(QWidget):
         self.qpte_encrypt = QPlainTextEdit(self)
         self.qpte_encrypt.setObjectName("qpteText")
 
-        self.btn_choose_file_encrypt = QPushButton("Chọn file",self)
+        self.btn_choose_file_encrypt = QPushButton("Select file",self)
         self.btn_choose_file_encrypt.hide()
+        self.btn_choose_file_encrypt.clicked.connect(self.choose_file_encrypt)
 
         self.qle_file_path_encrypt =QLineEdit(self)
         self.qle_file_path_encrypt.hide()
@@ -121,8 +123,9 @@ class chukyso(QWidget):
         self.qpte_decrypt = QPlainTextEdit(self)
         self.qpte_decrypt.setObjectName("qpteText")
 
-        self.btn_choose_file_decrypt = QPushButton("Chọn file", self)
+        self.btn_choose_file_decrypt = QPushButton("Select file", self)
         self.btn_choose_file_decrypt.hide()
+        self.btn_choose_file_decrypt.clicked.connect(self.choose_file_decrypt)
 
         self.qle_file_path_decrypt = QLineEdit(self)
         self.qle_file_path_decrypt.hide()
@@ -203,6 +206,7 @@ class chukyso(QWidget):
 
         self.setLayout(hbox)
         self.show()
+    
     def choose_options_encrypt(self,value):
         value = self.cbb_encrypt_type.currentText()
         if value == "File" :
@@ -213,6 +217,7 @@ class chukyso(QWidget):
             self.btn_choose_file_encrypt.hide()
             self.qle_file_path_encrypt.hide()
             self.qpte_encrypt.show()
+
     def chage_options_decrypt(self,value):
         value = self.cbb_decrypt_type.currentText()
         if value == "File" :
@@ -223,6 +228,18 @@ class chukyso(QWidget):
             self.btn_choose_file_decrypt.hide()
             self.qle_file_path_decrypt.hide()
             self.qpte_decrypt.show()
+    
+    def choose_file_encrypt(self):
+        fname = QFileDialog.getOpenFileName(self, 'Open file', expanduser("~"), "Select files (*.*)")
+        if len(fname[0]) == 0:
+            return
+        self.qle_file_path_encrypt.setText(fname[0])
+
+    def choose_file_decrypt(self):
+        fname = QFileDialog.getOpenFileName(self, 'Open file', expanduser("~"), "Select files (*.*)")
+        if len(fname[0]) == 0:
+            return
+        self.qle_file_path_decrypt.setText(fname[0])
 
     def click_generatekey(self):
         public_key, self.private_key = generate_keypair()
@@ -230,25 +247,45 @@ class chukyso(QWidget):
         self.qpte_private_key.setPlainText(str(self.private_key))
     
     def click_sign(self):
-        plain_text = self.qpte_encrypt.toPlainText()
-        if len(plain_text) == 0:
-            plain_text = ''
+        md5 = MD5()
+        md5_text = None
         if not hasattr(self, "private_key"):
-            self.click_generatekey()
-
-        md5_text = md5_hash(plain_text)
+                self.click_generatekey()
+        if self.cbb_encrypt_type.currentIndex() == 0:
+            plain_text = self.qpte_encrypt.toPlainText()
+            if len(plain_text) == 0:
+                plain_text = ''
+            md5.hash(plain_text)
+            
+        else:
+            if self.qle_file_path_encrypt.text() == '':
+                self.choose_file_encrypt()
+            md5.hash(self.qle_file_path_encrypt.text(), 'file')
+        md5_text = md5.hexdigest()
         encrypt_signature = encrypt(self.private_key, md5_text)
 
         self.qle_md5_encrypt.setText(md5_text)
         self.qpte_hash_encrypt.setPlainText(encrypt_signature)
         
     def click_check(self):
-        plain_input_text = self.qpte_decrypt.toPlainText()
+        
         encrypt_text = self.qpte_hash_decrypt.toPlainText()
         public_key = self.qpte_key_decrypt.toPlainText()
         if public_key == '' or encrypt_text == '':
             return
-        md5_text = md5_hash(plain_input_text)
+
+        md5 = MD5()
+        md5_text = None
+        
+        if self.cbb_decrypt_type.currentIndex() == 0:
+            plain_input_text = self.qpte_decrypt.toPlainText()
+            md5.hash(plain_input_text)
+            
+        else:
+            if self.qle_file_path_decrypt.text() == '':
+                self.choose_file_decrypt()
+            md5.hash(self.qle_file_path_decrypt.text(), 'file')
+        md5_text = md5.hexdigest()
         md5_decrypt = decrypt(eval(public_key), encrypt_text)
 
         self.qpte_md5_file_decrypt.setPlainText(md5_text)

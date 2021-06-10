@@ -1,9 +1,4 @@
-import hashlib
-
-def md5_hash(string):
-    return hashlib.md5(string.encode('utf8')).hexdigest()
-
-def string_to_int(string, size_n):
+def string_to_int(string):
     base = 4
     x = ""
     for i in string:

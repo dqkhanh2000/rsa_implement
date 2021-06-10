@@ -96,7 +96,7 @@ def generate_keypair(p = 0, q = 0):
 def encrypt(pk, plaintext):
     key, n = pk
     #Convert each letter in the plaintext to numbers based on the character using a^b mod m
-    plain_int = string_to_int(plaintext, len(plaintext))
+    plain_int = string_to_int(plaintext)
     cipher_int = pow(plain_int, key, n)
     ciphers = int_to_base64(cipher_int)
     return ciphers

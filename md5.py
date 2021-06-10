@@ -1,8 +1,10 @@
+from hashlib import md5
 from math import floor, sin, pow
 import struct
 import numpy as np
 from enum import Enum
 from bitarray import bitarray
+from lib import *
 #
 # A = 0x67452301
 # B = 0xEFCDAB89
@@ -27,7 +29,7 @@ def leftshift(x, c):
 
 
 
-class HashMD5(object):
+class MD5(object):
     def __init__(self):
         self.byteorder = 'little'
         self.block_size = 64
@@ -53,10 +55,9 @@ class HashMD5(object):
         self.hash_pieces = [a0, b0, c0, d0]
 
     def hash(self, arg,type='text'):
-        def readF(arg):
-            return open(arg,'rb').read()
+        
         if type == 'file':
-            arg = readF(arg)
+            arg = open(arg,'rb').read()
         else:
             arg = arg.encode('utf-8')
         s, K = self._s, self._K
@@ -66,12 +67,10 @@ class HashMD5(object):
         origin_len_of_bits = (8 * len(data)) & 0xFFFFFFFFFFFFFFFF
         pres = 0x80
 
-        print(int.from_bytes(b'0x80','big'))
         data.append(0x80)
         while len(data) % 64 != 56:
             data.append(0)
         data += origin_len_of_bits.to_bytes(8, byteorder='little')
-        print(range(0, len(data), 64))
         for offset in range(0, len(data), 64):
             chunks = data[offset: offset + 64]
 
@@ -98,6 +97,8 @@ class HashMD5(object):
             d0 = (d0 + D) & 0xFFFFFFFF
         self.hash_pieces = [a0, b0, c0, d0]
 
+        # return self.hexdigest()
+
     def hexdigest(self):
         def digest(list_hash):
             return sum(leftshift(x, (32 * ig)) for ig, x in enumerate(list_hash))
@@ -105,10 +106,16 @@ class HashMD5(object):
         digest = digest(self.hash_pieces)
         raw = digest.to_bytes(16, byteorder="little")
         fortmatStr = '{:0' + str(2 * 16) + 'x}'
-        print(fortmatStr)
         return fortmatStr.format(int.from_bytes(raw, byteorder="big"))
 
-# if __name__ == '__main__':
-#     h1 = HashMD5()
-#     h1.hash('a')
-#     print(h1.hexdigest())
+if __name__ == '__main__':
+    m = MD5()
+    # ml = hashlib.md5()
+    # with open("/Users/khanh/abc.png", "rb") as f:
+    #     l = f.read()
+    #     # m.hash(f)
+    #     ml.update(l)
+    # m.hash("/Users/khanh/abc.png", "file")
+    # print(m.hexdigest())
+    # print(ml.hexdigest())
+    # print(md5_hash("a"))
