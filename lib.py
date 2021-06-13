@@ -6,7 +6,18 @@ def string_to_int(string):
         while len(c) != base:
             c = '0' + c #0000
         x+= c
-    return int(x)
+    return x
+
+def int_to_string(data):
+    i = 0
+    string = ''
+    while len(data)%4 != 0:
+        data = '0'+data
+    while i != len (data):
+        c = data[i:i+4]
+        string += chr(int(c))
+        i += 4
+    return string
 
 def int_to_base64(a: int):
     r = ""

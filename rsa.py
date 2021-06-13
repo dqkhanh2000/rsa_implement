@@ -77,9 +77,9 @@ def generate_big_prime(bits):
 
 def generate_keypair(p = 0, q = 0):
     if p == 0:
-        p = generate_big_prime(256)
+        p = generate_big_prime(32)
     if q == 0:
-        q = generate_big_prime(256)
+        q = generate_big_prime(32)
     n = p * q
     phi = (p-1) * (q-1)
     e = 65537
@@ -93,36 +93,88 @@ def generate_keypair(p = 0, q = 0):
     #Public key is (e, n) and private key is (d, n)
     return ((e, n), (d, n))
 
-def encrypt(pk, plaintext):
-    key, n = pk
+def split_big_int(data, n_in_key):
+    """
+    plit data into multiple numbers less than n in key
+
+    Args:
+        data (int): big number
+        n_in_key (int): number n in the private key
+
+    Returns:
+        list: list number
+    """
+    list_lest_than_n = []
+    x = ""
+    size_n = len(str(n_in_key))
+    while size_n % 4 != 0:
+        size_n -= 1
+    for i in data:
+        if len(x) == size_n:
+            list_lest_than_n.append(int(x))
+            x = ""
+        x+= i
+    list_lest_than_n.append(int(x))
+    return list_lest_than_n
+
+def encrypt(key, plaintext):
+    """encrypt data C = (𝑚^𝑒) 𝑚𝑜𝑑 𝑛
+
+    Args:
+        public_key (e, n)
+        plaintext (string)
+
+    Returns:
+        string base 64 encrypt data
+    """
+    e, n = key
     #Convert each letter in the plaintext to numbers based on the character using a^b mod m
     plain_int = string_to_int(plaintext)
-    cipher_int = pow(plain_int, key, n)
-    ciphers = int_to_base64(cipher_int)
+    print(f'plain in integer: {plain_int}, length: {len(str(int(plain_int)))}')
+
+    split_data = split_big_int(plain_int, n)
+    ciphers = ''
+    for m in split_data:
+        c = pow(m, e, n)
+        cipher = int_to_base64(c)
+        ciphers += cipher +' '
+
     return ciphers
 
 def decrypt(pk, ciphertext):
-    key, n = pk
-    cipher_int = base64_to_int(ciphertext)
-    plain_int = pow(cipher_int, key, n)
-    str_plaint_int = str(plain_int)
-    while len(str_plaint_int) % 4 != 0:
-        str_plaint_int = '0'+str_plaint_int
-    i = 0
+    """decrypt cipher text using C=𝑐^𝑑 𝑚𝑜𝑑 𝑛
+
+    Args:
+        public_key (d, n)
+        plaintext (string)
+
+    Returns:
+        string plain text
+    """
+
+    d, n = pk
     plain_text = ''
-    while i != len (str_plaint_int):
-        c = str_plaint_int[i:i+4]
-        i += 4
-        plain_text += chr(int(c))
-    return plain_text
+    list_base = ciphertext.split(' ')
+    list_base.pop()
+    for c in list_base:
+        cipher_int = base64_to_int(c)
+        plain_int = pow(cipher_int, d, n)
+        str_plaint_int = str(plain_int)
+        while len(str_plaint_int) % 4 != 0:
+            str_plaint_int = '0'+str_plaint_int
+            
+        plain_text += str_plaint_int
+    return int_to_string(plain_text)
 
 if __name__ == '__main__':
-    p = generate_big_prime(128)
-    q = generate_big_prime(128)
+    p = generate_big_prime(16)
+    q = generate_big_prime(16)
     pub, pri = generate_keypair(p, q)
+    print(f'public key: e={pub[0]}, n={pub[1]}')
+    print(f'private key: d={pri[0]}, n={pri[1]}')
     mess = "hello khánh"
     print(f'mess: {mess}')
     encrypts = encrypt(pri, mess)
-    print(f'encrypt signature: {encrypts}')
+    print(f'cipher signature: {encrypts}')
     dmess = decrypt(pub, encrypts)
     print(f'decrypt mess: {dmess}')
